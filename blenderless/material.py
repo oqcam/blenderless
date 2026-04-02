@@ -55,7 +55,10 @@ class MaterialRGBA(Material):
     def blender_material(self):
         if self._blender_material is None:
             self._blender_material = bpy.data.materials.new(name=self.material_name)
-            self._blender_material.diffuse_color = self.rgba
+            self._blender_material.use_nodes = True
+            bsdf = self._blender_material.node_tree.nodes.get('Principled BSDF')
+            if bsdf is not None:
+                bsdf.inputs['Base Color'].default_value = self.rgba
         return self._blender_material
 
     @staticmethod

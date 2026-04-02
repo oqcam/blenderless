@@ -6,7 +6,8 @@ import trimesh
 
 class FileHandler():
 
-    @abc.abstractstaticmethod
+    @staticmethod
+    @abc.abstractmethod
     def load(path: Path) -> trimesh.Trimesh:
         pass
 

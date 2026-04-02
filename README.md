@@ -91,8 +91,8 @@ objects: # See blenderless.geometry and blenderless.material
 
 ## Install
 
-Make sure to have installed a recent Bazel >= 5.2 and Python3.10.
-Bazel will internally search for `python3.10` executable.
+Make sure to have installed a recent Bazel >= 5.2 and Python3.12.
+Bazel will internally search for `python3.12` executable.
 
 ### Testing
 

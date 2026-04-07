@@ -53,6 +53,17 @@ RUN git clone --branch v11.0.0 --depth 1 https://github.com/AcademySoftwareFound
     && ninja -C /tmp/openvdb/build install \
     && rm -rf /tmp/openvdb
 
+# Build OpenImageDenoise v2.3.0 from source (not available as Ubuntu package)
+RUN apt-get update && apt-get install -y --no-install-recommends ispc && rm -rf /var/lib/apt/lists/*
+RUN git clone --branch v2.3.0 --depth 1 --recurse-submodules https://github.com/RenderKit/oidn.git /tmp/oidn \
+    && cmake -S /tmp/oidn -B /tmp/oidn/build \
+        -DCMAKE_INSTALL_PREFIX=/usr/local \
+        -DOIDN_APPS=OFF \
+        -G Ninja \
+    && ninja -C /tmp/oidn/build -j12 \
+    && ninja -C /tmp/oidn/build install \
+    && rm -rf /tmp/oidn
+
 RUN mkdir build \
     && cd build \
     && cmake -C ../blender/build_files/cmake/config/bpy_module.cmake \
@@ -73,7 +84,8 @@ RUN cd build && ninja install
 # Copy custom-built shared libs into the install dir so the tarball is self-contained
 RUN mkdir -p install/lib \
     && cp /usr/local/lib/libOpenImageIO*.so* install/lib/ \
-    && cp /usr/local/lib/libopenvdb*.so* install/lib/
+    && cp /usr/local/lib/libopenvdb*.so* install/lib/ \
+    && cp /usr/local/lib/libOpenImageDenoise*.so* install/lib/
 
 RUN tar --zstd -cf bpy-$BLENDER_VERSION-headless-python$PYTHON_VERSION-x86_64-linux-gnu.tar.zst install/
 

@@ -23,9 +23,9 @@ ARG BLENDER_VERSION_MINOR=2
 ARG BLENDER_VERSION_PATCH=19
 ARG BLENDER_VERSION=$BLENDER_VERSION_MAJOR.$BLENDER_VERSION_MINOR.$BLENDER_VERSION_PATCH
 
-RUN GIT_LFS_SKIP_SMUDGE=1 git clone --branch v$BLENDER_VERSION --depth 1 https://github.com/blender/blender.git \
+RUN git clone --branch v$BLENDER_VERSION --depth 1 https://projects.blender.org/blender/blender.git \
     && cd blender \
-    && GIT_LFS_SKIP_SMUDGE=1 git submodule update --init --recursive
+    && git submodule update --init --recursive
 
 RUN cd blender && make update
 

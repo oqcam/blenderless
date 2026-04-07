@@ -1,0 +1,4 @@
+services:
+  test:
+    build: .
+    command: bazel test tests --test_output=errors

@@ -96,6 +96,18 @@ Bazel will internally search for `python3.12` executable.
 
 ### Testing
 
+With Docker (recommended):
 ```sh
-bazel test //...
+docker compose run test
+```
+
+Or without compose:
+```sh
+docker build -t blenderless-test .
+docker run blenderless-test
+```
+
+With Bazel:
+```sh
+bazel test tests --test_output=errors
 ```

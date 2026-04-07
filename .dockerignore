@@ -1,0 +1,8 @@
+.git
+bazel-*
+MODULE.bazel
+MODULE.bazel.lock
+__pycache__
+*.pyc
+.pytest_cache
+build_tools/blender_builder/bpy-*.tar.zst

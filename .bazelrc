@@ -1,5 +1,8 @@
 # See e.g. https://blog.aspect.dev/bazelrc-flags
 
+# Use WORKSPACE-based dependency management (not bzlmod)
+common --noenable_bzlmod
+
 # Fix the wrong default to generate __init__.py to delimit a Python package.
 build --incompatible_default_to_explicit_init_py
 
@@ -17,6 +20,8 @@ build --noexperimental_check_output_files
 
 # Don't bother building targets which aren't dependencies of the tests.
 test --build_tests_only
+# Disable sandbox for tests so bpy can access system shared libraries
+test --spawn_strategy=local
 
 # Load any settings specific to the current user.
 # user.bazelrc should appear in .gitignore so that settings are not shared with

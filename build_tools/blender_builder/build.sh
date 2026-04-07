@@ -1,4 +1,11 @@
 #!/bin/bash
+# Builds the headless bpy module inside Docker and extracts the tarball.
+#
+# The resulting bpy-*.tar.zst file should be uploaded to the GitHub releases
+# page and its sha256 updated in build_tools/repositories.bzl.
+#
+# This takes ~30 minutes on a modern machine (compiles OIIO, OpenVDB, OIDN,
+# and Blender from source).
 
 set -ex
 

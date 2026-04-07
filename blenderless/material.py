@@ -59,6 +59,8 @@ class MaterialRGBA(Material):
             bsdf = self._blender_material.node_tree.nodes.get('Principled BSDF')
             if bsdf is not None:
                 bsdf.inputs['Base Color'].default_value = self.rgba
+                bsdf.inputs['Roughness'].default_value = 1.0
+                bsdf.inputs['Specular IOR Level'].default_value = 0.0
         return self._blender_material
 
     @staticmethod

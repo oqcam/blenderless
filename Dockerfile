@@ -22,8 +22,7 @@ ARG DEBIAN_FRONTEND=noninteractive
 #
 # The bpy tarball (fetched by Bazel) is self-contained: it bundles its full
 # runtime library closure with RUNPATHs stamped, so no Blender-related
-# packages are installed here — this image doubles as a check that the
-# tarball really is self-contained.
+# packages are installed here.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
         python3.12 python3 curl zip file libgl1 ca-certificates git gcc g++ \

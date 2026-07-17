@@ -111,9 +111,9 @@ RUN mkdir build \
 RUN cd build && ninja install
 
 # Bundle the complete runtime library closure into install/lib so the tarball
-# is self-contained: consumers put install/lib on LD_LIBRARY_PATH and need no
-# Blender-related host packages. Only glibc and the (unused, headless) GL/X11
-# families are left to the host. Copies are dereferenced (cp -aL): ldd
+# is self-contained: consumers need no Blender-related host packages and no
+# LD_LIBRARY_PATH/ldconfig setup (RUNPATHs are stamped below). Only glibc and
+# the (unused, headless) GL/X11 families are left to the host. Copies are dereferenced (cp -aL): ldd
 # reports SONAME symlinks, and dangling symlinks are silently dropped by
 # Bazel's glob() on the consumer side. Iterated to a fixpoint so dependencies
 # of copied libraries are picked up too.
@@ -134,6 +134,18 @@ libgcc_s.so*|libstdc++.so*|libGL*|libEGL*|libX11*|libxcb*|libGLX*|libGLdispatch*
         done; \
         [ "$changed" = 0 ] && break; \
       done
+
+# Stamp RUNPATHs so the loader finds the bundled libraries with no environment
+# setup: bpy/__init__.so searches the sibling lib/ directory, and each bundled
+# library searches its own directory. DT_RUNPATH is not transitive — patching
+# only __init__.so would still leave e.g. libembree4 unable to locate libtbb —
+# so every bundled object gets its own RUNPATH. ($ORIGIN resolves after
+# symlinks, so this also holds inside Bazel runfiles trees.)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends patchelf \
+    && rm -rf /var/lib/apt/lists/* \
+    && patchelf --set-rpath '$ORIGIN/../lib' install/bpy/__init__.so \
+    && find install/lib -maxdepth 1 -type f -name '*.so*' -exec patchelf --set-rpath '$ORIGIN' {} +
 
 # Offline completeness check: every DT_NEEDED of bpy and of each bundled
 # library must itself be bundled or be a deliberate host residual. This is
@@ -163,8 +175,9 @@ RUN find install -depth -name '* *' | while read -r f; do mv "$f" "$(echo "$f" |
 RUN tar --zstd -cf bpy-$BLENDER_VERSION-headless-python$PYTHON_VERSION-x86_64-linux-gnu.tar.zst install/
 
 # Clean-room import check: a fresh image with nothing but python and zstd —
-# none of the build dependencies — must be able to import bpy from the
-# tarball. This is what actually proves the artifact is self-contained.
+# none of the build dependencies, no LD_LIBRARY_PATH — must be able to import
+# bpy from the tarball. This is what actually proves the artifact is
+# self-contained (the RUNPATHs alone must resolve the whole closure).
 FROM ubuntu:24.04 AS verify
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -183,4 +196,4 @@ COPY --from=builder /blender_ws/bpy-$BLENDER_VERSION-headless-python$PYTHON_VERS
 
 RUN tar --zstd -xf bpy-$BLENDER_VERSION-headless-python$PYTHON_VERSION-x86_64-linux-gnu.tar.zst \
     && cd install \
-    && LD_LIBRARY_PATH=./lib python$PYTHON_VERSION -c "import bpy; print(f'bpy {bpy.app.version_string} loaded successfully')"
+    && python$PYTHON_VERSION -c "import bpy; print(f'bpy {bpy.app.version_string} loaded successfully')"

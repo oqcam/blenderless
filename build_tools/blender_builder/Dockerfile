@@ -7,7 +7,7 @@
 # The resulting bpy-*.tar.zst tarball should be uploaded to the GitHub releases
 # page and referenced in build_tools/repositories.bzl.
 
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG PYTHON_VERSION=3.12
@@ -110,18 +110,90 @@ RUN mkdir build \
 
 RUN cd build && ninja install
 
-# Bundle custom-built shared libraries into the install directory.
-# These are not available as Ubuntu packages at the required versions, so they must
-# be shipped alongside the bpy module for the tarball to be self-contained.
+# Bundle the complete runtime library closure into install/lib so the tarball
+# is self-contained: consumers need no Blender-related host packages and no
+# LD_LIBRARY_PATH/ldconfig setup (RUNPATHs are stamped below). Only glibc and
+# the (unused, headless) GL/X11 families are left to the host. Copies are dereferenced (cp -aL): ldd
+# reports SONAME symlinks, and dangling symlinks are silently dropped by
+# Bazel's glob() on the consumer side. Iterated to a fixpoint so dependencies
+# of copied libraries are picked up too.
 RUN mkdir -p install/lib \
-    && cp /usr/local/lib/libOpenImageIO*.so* install/lib/ \
-    && cp /usr/local/lib/libopenvdb*.so* install/lib/ \
-    && cp /usr/local/lib/libOpenImageDenoise*.so* install/lib/
+    && cp -L /usr/local/lib/libOpenImageIO*.so* install/lib/ \
+    && cp -L /usr/local/lib/libopenvdb*.so* install/lib/ \
+    && cp -L /usr/local/lib/libOpenImageDenoise*.so* install/lib/ \
+    && for i in 1 2 3 4 5; do \
+        changed=0; \
+        for lib in $(LD_LIBRARY_PATH=$PWD/install/lib ldd install/bpy/__init__.so install/lib/*.so* 2>/dev/null \
+                     | awk '/=> \//{print $3}' | sort -u); do \
+          base=$(basename "$lib"); \
+          case "$base" in \
+            libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|ld-linux*|libutil.so*|libresolv.so*|\
+libgcc_s.so*|libstdc++.so*|libGL*|libEGL*|libX11*|libxcb*|libGLX*|libGLdispatch*) continue ;; \
+          esac; \
+          if [ ! -e "install/lib/$base" ]; then cp -aL "$lib" "install/lib/$base"; changed=1; fi; \
+        done; \
+        [ "$changed" = 0 ] && break; \
+      done
+
+# Stamp RUNPATHs so the loader finds the bundled libraries with no environment
+# setup: bpy/__init__.so searches the sibling lib/ directory, and each bundled
+# library searches its own directory. DT_RUNPATH is not transitive — patching
+# only __init__.so would still leave e.g. libembree4 unable to locate libtbb —
+# so every bundled object gets its own RUNPATH. ($ORIGIN resolves after
+# symlinks, so this also holds inside Bazel runfiles trees.)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends patchelf \
+    && rm -rf /var/lib/apt/lists/* \
+    && patchelf --set-rpath '$ORIGIN/../lib' install/bpy/__init__.so \
+    && find install/lib -maxdepth 1 -type f -name '*.so*' -exec patchelf --set-rpath '$ORIGIN' {} +
+
+# Offline completeness check: every DT_NEEDED of bpy and of each bundled
+# library must itself be bundled or be a deliberate host residual. This is
+# readelf-based on purpose — an ldd-based check inside this image would be
+# satisfied by the installed build dependencies and prove nothing.
+RUN missing=0; \
+    for so in install/bpy/__init__.so install/lib/*.so*; do \
+      [ -f "$so" ] || continue; \
+      for needed in $(readelf -d "$so" 2>/dev/null | awk '/NEEDED/{gsub(/[\[\]]/, "", $NF); print $NF}'); do \
+        case "$needed" in \
+          libc.so*|libm.so*|libdl.so*|libpthread.so*|librt.so*|ld-linux*|libutil.so*|libresolv.so*|\
+libgcc_s.so*|libstdc++.so*|libGL*|libEGL*|libX11*|libxcb*|libGLX*|libGLdispatch*) continue ;; \
+        esac; \
+        [ -f "install/lib/$needed" ] || { echo "MISSING: $needed (needed by $so)"; missing=1; }; \
+      done; \
+    done; \
+    [ "$missing" = 0 ]
+
+# Rename files with spaces (fonts such as "Noto Sans CJK Regular.woff2");
+# they break tar-packaging rules in consuming Bazel workspaces. -depth so
+# entries inside renamed directories are handled before their parent. Note
+# RUN uses dash: no bashisms here, and filenames never contain newlines.
+RUN find install -depth -name '* *' | while read -r f; do mv "$f" "$(echo "$f" | tr ' ' '_')"; done \
+    && [ "$(find install -name '* *' | wc -l)" = 0 ]
 
 # Create the distributable tarball.
 RUN tar --zstd -cf bpy-$BLENDER_VERSION-headless-python$PYTHON_VERSION-x86_64-linux-gnu.tar.zst install/
 
-# Verify that bpy can be imported successfully.
-RUN ldconfig /usr/local/lib \
+# Clean-room import check: a fresh image with nothing but python and zstd —
+# none of the build dependencies, no LD_LIBRARY_PATH — must be able to import
+# bpy from the tarball. This is what actually proves the artifact is
+# self-contained (the RUNPATHs alone must resolve the whole closure).
+FROM ubuntu:24.04 AS verify
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG PYTHON_VERSION=3.12
+ARG BLENDER_VERSION_MAJOR=4
+ARG BLENDER_VERSION_MINOR=2
+ARG BLENDER_VERSION_PATCH=19
+ARG BLENDER_VERSION=$BLENDER_VERSION_MAJOR.$BLENDER_VERSION_MINOR.$BLENDER_VERSION_PATCH
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python$PYTHON_VERSION zstd \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /blender_ws
+COPY --from=builder /blender_ws/bpy-$BLENDER_VERSION-headless-python$PYTHON_VERSION-x86_64-linux-gnu.tar.zst .
+
+RUN tar --zstd -xf bpy-$BLENDER_VERSION-headless-python$PYTHON_VERSION-x86_64-linux-gnu.tar.zst \
     && cd install \
-    && LD_LIBRARY_PATH=./lib python$PYTHON_VERSION -c "import bpy; print(f'bpy {bpy.app.version_string} loaded successfully')"
+    && python$PYTHON_VERSION -c "import bpy; print(f'bpy {bpy.app.version_string} loaded successfully')"

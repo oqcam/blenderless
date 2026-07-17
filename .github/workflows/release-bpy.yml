@@ -1,0 +1,48 @@
+name: Release bpy
+
+# Builds the self-contained bpy tarball with build_tools/blender_builder
+# (including its clean-room import verification stage) and attaches it to a
+# draft GitHub release. Publish the draft manually after review, then update
+# the sha256 in build_tools/repositories.bzl and in consuming repos.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag (e.g. bpy-4.2.19-python3.12-r2)"
+        required: true
+        type: string
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Free up disk space
+        # The Blender build needs ~25 GB; the stock runner image keeps large
+        # unused toolchains around.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: Build bpy tarball
+        working-directory: build_tools/blender_builder
+        run: ./build.sh
+
+      - name: Compute checksum
+        working-directory: build_tools/blender_builder
+        run: sha256sum bpy-*.tar.zst | tee SHA256SUMS
+
+      - name: Create draft release with tarball
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: build_tools/blender_builder
+        run: |
+          gh release create "${{ inputs.release_tag }}" \
+            --draft \
+            --title "${{ inputs.release_tag }}" \
+            --notes "Self-contained headless bpy module. See SHA256SUMS for checksums." \
+            bpy-*.tar.zst SHA256SUMS

@@ -25,4 +25,5 @@ docker_build_args=(
 )
 
 docker build ${docker_build_args[@]} -t ${IMAGE} .
-docker run -it --rm -v$(pwd):/output ${IMAGE} bash -c "cp /blender_ws/bpy-$BLENDER_VERSION-headless-python$PYTHON_VERSION-x86_64-linux-gnu.tar.zst /output/"
+# No -t: build.sh also runs in CI (see .github/workflows/release-bpy.yml).
+docker run --rm -v"$(pwd)":/output ${IMAGE} bash -c "cp /blender_ws/bpy-$BLENDER_VERSION-headless-python$PYTHON_VERSION-x86_64-linux-gnu.tar.zst /output/"

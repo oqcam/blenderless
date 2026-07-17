@@ -7,7 +7,7 @@ def blenderless_repositories():
     http_archive(
         name = "bpy",
         build_file = "@blenderless//build_tools:bpy.BUILD.bazel",
-        sha256 = "4bf30b5eb6365e648e4ad7a0ce3d45a8a303cb0b722890fe0c33e799e1fe736b",
+        sha256 = "ff66454cf44db736b626b7030a30171ce4e271b034bea5049683eb63d314daea",
         strip_prefix = "install",
-        url = "https://github.com/oqcam/blenderless/releases/download/bpy-4.2.19-python3.12/bpy-4.2.19-headless-python3.12-x86_64-linux-gnu.tar.zst",
+        url = "https://github.com/oqcam/blenderless/releases/download/bpy-4.2.19-python3.12-r3/bpy-4.2.19-headless-python3.12-x86_64-linux-gnu.tar.zst",
     )
